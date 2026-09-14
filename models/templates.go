@@ -80,6 +80,16 @@ type CampaignAnalyticsLink struct {
 	Count int    `db:"count" json:"count"`
 }
 
+type CampaignAnalyticsRate struct {
+	CampaignID int       `db:"campaign_id" json:"campaign_id"`
+	Name       string    `db:"name" json:"name"`
+	Sent       int       `db:"sent" json:"sent"`
+	StartedAt  null.Time `db:"started_at" json:"started_at"`
+	Views      int       `db:"views" json:"views"`
+	Clicks     int       `db:"clicks" json:"clicks"`
+	Bounces    int       `db:"bounces" json:"bounces"`
+}
+
 type CampaignSubscriberActivity struct {
 	Total            int        `db:"total" json:"-"`
 	SubscriberID     int        `db:"subscriber_id" json:"subscriber_id"`

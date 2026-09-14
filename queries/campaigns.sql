@@ -276,6 +276,15 @@ SELECT COUNT(%s) AS "count", url
         AND NOT link_clicks.is_bot
     GROUP BY links.url ORDER BY "count" DESC LIMIT 50;
 
+-- name: get-campaign-analytics-rates
+-- Unique subscriber counts against campaigns.sent, which is a lifetime counter. The date filter is
+-- deliberately not applied here: windowing only the numerators would understate every rate.
+SELECT campaigns.id AS campaign_id, campaigns.name, campaigns.sent, campaigns.started_at,
+    (SELECT COUNT(DISTINCT subscriber_id) FROM campaign_views WHERE campaign_id = campaigns.id AND NOT is_bot) AS views,
+    (SELECT COUNT(DISTINCT subscriber_id) FROM link_clicks WHERE campaign_id = campaigns.id AND NOT is_bot) AS clicks,
+    (SELECT COUNT(*) FROM bounces WHERE campaign_id = campaigns.id) AS bounces
+    FROM campaigns WHERE id = ANY($1) ORDER BY campaigns.created_at;
+
 -- name: get-campaign-subscriber-activity
 -- One row per subscriber. Empty when privacy.individual_tracking is off.
 WITH views AS (

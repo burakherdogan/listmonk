@@ -16,7 +16,7 @@
 
     <form @submit.prevent="onSubmit">
       <div class="columns">
-        <div class="column is-6">
+        <div class="column is-11">
           <b-field :label="$t('globals.terms.campaigns')" label-position="on-border">
             <b-taginput v-model="form.campaigns" :data="queriedCampaigns" name="campaigns" ellipsis icon="tag-outline"
               :placeholder="$t('globals.terms.campaigns')" autocomplete :allow-new="false" :open-on-focus="true"
@@ -25,29 +25,69 @@
           </b-field>
         </div>
 
-        <div class="column is-5">
-          <div class="columns">
-            <div class="column is-6">
-              <b-field data-cy="from" :label="$t('analytics.fromDate')" label-position="on-border">
-                <b-datetimepicker v-model="form.from" icon="calendar-clock" :timepicker="{ hourFormat: '24' }"
-                  :datetime-formatter="formatDateTime" @input="onFromDateChange" />
-              </b-field>
-            </div>
-            <div class="column is-6">
-              <b-field data-cy="to" :label="$t('analytics.toDate')" label-position="on-border">
-                <b-datetimepicker v-model="form.to" icon="calendar-clock" :timepicker="{ hourFormat: '24' }"
-                  :datetime-formatter="formatDateTime" @input="onToDateChange" />
-              </b-field>
-            </div>
-          </div><!-- columns -->
-        </div><!-- columns -->
-
         <div class="column is-1">
           <b-button native-type="submit" type="is-primary" icon-left="magnify" :disabled="form.campaigns.length === 0"
             data-cy="btn-search" />
         </div>
       </div><!-- columns -->
     </form>
+
+    <section v-if="rates.length" class="rates">
+      <h4>{{ $t('analytics.rates') }}</h4>
+      <p class="has-text-grey is-size-7">{{ $t('analytics.ratesHelp') }}</p>
+
+      <b-table :data="rates" hoverable>
+        <b-table-column v-slot="props" field="name" :label="$tc('globals.terms.campaign', 1)">
+          {{ props.row.name }}
+        </b-table-column>
+        <b-table-column v-slot="props" field="startedAt" :label="$t('campaigns.startedAt')" width="170">
+          {{ props.row.startedAt ? $utils.niceDate(props.row.startedAt, true) : '—' }}
+        </b-table-column>
+        <b-table-column v-slot="props" field="sent" :label="$t('campaigns.sent')" width="110" numeric>
+          {{ $utils.niceNumber(props.row.sent) }}
+        </b-table-column>
+        <b-table-column v-slot="props" field="views" :label="$t('analytics.openRate')" width="110" numeric>
+          {{ pct(props.row.views, props.row.sent) }}
+        </b-table-column>
+        <b-table-column v-slot="props" field="clicks" :label="$t('analytics.clickRate')" width="110" numeric>
+          {{ pct(props.row.clicks, props.row.sent) }}
+        </b-table-column>
+        <b-table-column v-slot="props" field="ctor" :label="$t('analytics.ctor')" width="110" numeric>
+          {{ pct(props.row.clicks, props.row.views) }}
+        </b-table-column>
+        <b-table-column v-slot="props" field="bounces" :label="$t('analytics.bounceRate')" width="110" numeric>
+          {{ pct(props.row.bounces, props.row.sent) }}
+        </b-table-column>
+      </b-table>
+    </section>
+
+    <hr />
+
+    <div class="range-filter mt-5">
+      <b-field class="mb-2">
+        <b-radio-button v-for="r in ranges" :key="r" v-model="range" :native-value="r" size="is-small"
+          @input="onRangeChange">
+          <template v-if="r === ''">{{ $t('analytics.sinceSent') }}</template>
+          <template v-else-if="r === 'custom'">{{ $t('analytics.customRange') }}</template>
+          <template v-else>{{ $t('analytics.lastDays', { days: r }) }}</template>
+        </b-radio-button>
+      </b-field>
+
+      <div v-if="range === 'custom'" class="columns">
+        <div class="column is-3">
+          <b-field data-cy="from" :label="$t('analytics.fromDate')" label-position="on-border">
+            <b-datetimepicker v-model="form.from" icon="calendar-clock" :timepicker="{ hourFormat: '24' }"
+              :datetime-formatter="formatDateTime" @input="onFromDateChange" />
+          </b-field>
+        </div>
+        <div class="column is-3">
+          <b-field data-cy="to" :label="$t('analytics.toDate')" label-position="on-border">
+            <b-datetimepicker v-model="form.to" icon="calendar-clock" :timepicker="{ hourFormat: '24' }"
+              :datetime-formatter="formatDateTime" @input="onToDateChange" />
+          </b-field>
+        </div>
+      </div><!-- columns -->
+    </div>
 
     <section class="subscriber-activity mt-5" v-if="serverConfig.privacy.individual_tracking">
       <h4>
@@ -72,7 +112,7 @@
         @page-change="onSubscribersPageChange" :current-page="subscribers.page" :per-page="subscribers.perPage"
         :total="subscribers.total" hoverable>
         <b-table-column v-slot="props" field="email" :label="$t('subscribers.email')">
-          <router-link :to="{ name: 'subscriber', params: { id: props.row.subscriberId } }">
+          <router-link :to="{ name: 'subscriberAnalytics', query: { id: props.row.subscriberId } }">
             {{ props.row.email }}
           </router-link>
           <b-tag v-if="props.row.subscriberStatus !== 'enabled'" :class="props.row.subscriberStatus" class="is-small">
@@ -82,27 +122,12 @@
         </b-table-column>
 
         <b-table-column v-slot="props" field="events" :label="$t('analytics.events')">
-          <b-taglist>
-            <b-tag v-if="props.row.views > 0" class="is-small">
-              {{ $t('analytics.opened') }} &times;{{ props.row.views }}
-            </b-tag>
-            <b-tag v-if="props.row.clicks > 0" class="is-small">
-              {{ $t('analytics.clicked') }} &times;{{ props.row.clicks }}
-              <template v-if="props.row.links > 1"> ({{ props.row.links }})</template>
-            </b-tag>
-            <b-tag v-if="props.row.bounces > 0" class="is-small bounced">
-              {{ $t('analytics.bounced') }} ({{ props.row.bounceType }})
-            </b-tag>
-          </b-taglist>
+          <activity-events :views="props.row.views" :clicks="props.row.clicks" :links="props.row.links"
+            :bounces="props.row.bounces" :bounce-type="props.row.bounceType" />
         </b-table-column>
 
         <b-table-column v-slot="props" field="lastAt" :label="$t('analytics.lastActivity')" width="220">
-          <span :title="$utils.niceDate(props.row.lastAt, true)">
-            {{ $utils.getDate(props.row.lastAt).fromNow() }}
-          </span>
-          <span v-if="props.row.firstAt" class="subscriber-meta">
-            {{ $t('analytics.firstActivity') }}: {{ $utils.getDate(props.row.firstAt).fromNow() }}
-          </span>
+          <activity-time :first-at="props.row.firstAt" :last-at="props.row.lastAt" />
         </b-table-column>
 
         <template #empty>
@@ -114,16 +139,19 @@
     <section class="charts mt-5">
       <div class="chart" v-for="(v, k) in charts" :key="k">
         <div class="columns">
-          <div class="column is-9">
+          <div class="column" :class="hasManyCampaigns ? 'is-9' : 'is-12'">
             <b-loading v-if="v.loading" :active="v.loading" :is-full-page="false" />
             <h4>
               {{ v.name }}
               <span v-if="v.type !== 'bar'" class="has-text-grey-light">({{ $utils.niceNumber(counts[k]) }})</span>
             </h4>
-            <chart :type="v.type" v-if="!v.loading" :data="v.data" :on-click="v.onClick" />
+            <template v-if="!v.loading">
+              <chart :type="v.type" v-if="counts[k] > 0" :data="v.data" :on-click="v.onClick" />
+              <empty-placeholder v-else />
+            </template>
           </div>
-          <div class="column is-2 donut-container">
-            <chart type="donut" v-if="!v.loading" :data="v.donutData" />
+          <div v-if="hasManyCampaigns" class="column is-2 donut-container">
+            <chart type="donut" v-if="!v.loading && counts[k] > 0" :data="v.donutData" />
           </div>
         </div>
       </div>
@@ -136,6 +164,8 @@ import dayjs from 'dayjs';
 import Vue from 'vue';
 import { mapState } from 'vuex';
 import { colors } from '../constants';
+import ActivityEvents from '../components/ActivityEvents.vue';
+import ActivityTime from '../components/ActivityTime.vue';
 import Chart from '../components/Chart.vue';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
@@ -153,6 +183,8 @@ const chartColors = [
 
 export default Vue.extend({
   components: {
+    ActivityEvents,
+    ActivityTime,
     Chart,
     EmptyPlaceholder,
   },
@@ -170,6 +202,9 @@ export default Vue.extend({
         links: 0,
       },
       urls: [],
+      rates: [],
+      ranges: ['', '7', '30', '90', 'custom'],
+      range: '',
       charts: {
         views: {
           name: this.$t('campaigns.views'),
@@ -317,8 +352,42 @@ export default Vue.extend({
       return { points: { datasets: lines }, donut };
     },
 
+    // The date range a campaign is actually alive in is the period after it went out, so that
+    // is the default. Anything shorter silently shows empty charts for older campaigns.
+    applyRange(camps) {
+      if (this.range === 'custom') {
+        return;
+      }
+
+      this.form.to = dayjs().toDate();
+
+      if (this.range) {
+        this.form.from = dayjs().subtract(parseInt(this.range, 10), 'day').toDate();
+        return;
+      }
+
+      const starts = camps.map((c) => dayjs(c.startedAt || c.createdAt));
+      this.form.from = starts.length > 0
+        ? starts.reduce((a, b) => (a.isBefore(b) ? a : b)).subtract(1, 'hour').toDate()
+        : dayjs().subtract(30, 'day').toDate();
+    },
+
+    onRangeChange() {
+      if (this.range === 'custom' || this.form.campaigns.length === 0) {
+        return;
+      }
+
+      this.onSubmit();
+    },
+
     onSubmit() {
-      this.$router.push({ query: { id: this.form.campaigns.map((c) => c.id), from: dayjs(this.form.from).unix(), to: dayjs(this.form.to).unix() } });
+      const q = { id: this.form.campaigns.map((c) => c.id), range: this.range };
+      if (this.range === 'custom') {
+        q.from = dayjs(this.form.from).unix();
+        q.to = dayjs(this.form.to).unix();
+      }
+
+      this.$router.push({ query: q });
     },
 
     queryCampaigns(q) {
@@ -356,6 +425,16 @@ export default Vue.extend({
       });
     },
 
+    pct(num, den) {
+      return den > 0 ? `${((num / den) * 100).toFixed(1)}%` : '—';
+    },
+
+    getRates(camps) {
+      this.$api.getCampaignAnalyticsRates({ id: camps.map((c) => c.id) }).then((data) => {
+        this.rates = data;
+      });
+    },
+
     getSubscribers(camps) {
       this.subscribers.loading = true;
 
@@ -389,14 +468,24 @@ export default Vue.extend({
 
     onLinkClick(e) {
       const bars = e.chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-      if (bars.length > 0) {
-        window.open(this.urls[bars[0].index], '_blank', 'noopener noreferrer');
+      if (bars.length === 0) {
+        return;
       }
+
+      const url = this.urls[bars[0].index];
+      this.$utils.confirm(this.$t('analytics.confirmOpenLink', { url }), () => {
+        window.open(url, '_blank', 'noopener noreferrer');
+      });
     },
   },
 
   computed: {
     ...mapState(['serverConfig']),
+
+    // The donuts split a metric across campaigns, which says nothing about a single one.
+    hasManyCampaigns() {
+      return this.form.campaigns.length > 1;
+    },
   },
 
   created() {
@@ -406,6 +495,7 @@ export default Vue.extend({
     const to = this.$route.query.to ? dayjs.unix(this.$route.query.to) : now;
     this.form.from = from.toDate();
     this.form.to = to.toDate();
+    this.range = this.$route.query.range !== undefined ? this.$route.query.range : '';
   },
 
   mounted() {
@@ -427,6 +517,7 @@ export default Vue.extend({
 
         this.$nextTick(() => {
           this.isSearchLoading = false;
+          this.applyRange(this.form.campaigns);
 
           // Fetch count for each analytics type (views, counts, bounces);
           Object.keys(this.charts).forEach((k) => {
@@ -436,6 +527,8 @@ export default Vue.extend({
             // Fetch views, clicks, bounces for every campaign.
             this.getData(k, this.form.campaigns);
           });
+
+          this.getRates(this.form.campaigns);
 
           if (this.serverConfig.privacy.individual_tracking) {
             this.subscribers.page = 1;

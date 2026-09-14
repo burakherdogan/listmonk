@@ -76,11 +76,12 @@ type Queries struct {
 	GetCampaignLinkCounts      *sqlx.Stmt `query:"get-campaign-link-counts"`
 	GetCampaignBounceCounts    *sqlx.Stmt `query:"get-campaign-bounce-counts"`
 
+	GetCampaignAnalyticsRates     *sqlx.Stmt `query:"get-campaign-analytics-rates"`
 	GetCampaignSubscriberActivity *sqlx.Stmt `query:"get-campaign-subscriber-activity"`
-	DeleteCampaignViews        *sqlx.Stmt `query:"delete-campaign-views"`
-	DeleteCampaignLinkClicks   *sqlx.Stmt `query:"delete-campaign-link-clicks"`
-	ExportCampaignViews        *sqlx.Stmt `query:"export-campaign-views"`
-	ExportCampaignLinkClicks   *sqlx.Stmt `query:"export-campaign-link-clicks"`
+	DeleteCampaignViews           *sqlx.Stmt `query:"delete-campaign-views"`
+	DeleteCampaignLinkClicks      *sqlx.Stmt `query:"delete-campaign-link-clicks"`
+	ExportCampaignViews           *sqlx.Stmt `query:"export-campaign-views"`
+	ExportCampaignLinkClicks      *sqlx.Stmt `query:"export-campaign-link-clicks"`
 
 	NextCampaigns            *sqlx.Stmt `query:"next-campaigns"`
 	GetRunningCampaign       *sqlx.Stmt `query:"get-running-campaign"`

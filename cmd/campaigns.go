@@ -630,6 +630,16 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 		from = c.QueryParams().Get("from")
 		to   = c.QueryParams().Get("to")
 	)
+	// Campaign engagement rates, which are lifetime numbers and take no date range.
+	if typ == "rates" {
+		out, err := a.core.GetCampaignAnalyticsRates(ids)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, okResp{out})
+	}
+
 	if !strHasLen(from, 10, 30) || !strHasLen(to, 10, 30) {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("analytics.invalidDates"))
 	}

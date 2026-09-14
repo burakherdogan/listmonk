@@ -422,6 +422,18 @@ func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate st
 	return out, nil
 }
 
+// GetCampaignAnalyticsRates returns the unique engagement counts and sent totals per campaign.
+func (c *Core) GetCampaignAnalyticsRates(campIDs []int) ([]models.CampaignAnalyticsRate, error) {
+	out := []models.CampaignAnalyticsRate{}
+	if err := c.q.GetCampaignAnalyticsRates.Select(&out, pq.Array(campIDs)); err != nil {
+		c.log.Printf("error fetching campaign rates: %v", err)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+
+	return out, nil
+}
+
 // GetCampaignSubscriberActivity returns per-subscriber open and click counts with a total count.
 func (c *Core) GetCampaignSubscriberActivity(campIDs []int, fromDate, toDate, event, search string, offset, limit int) ([]models.CampaignSubscriberActivity, int, error) {
 	if !strHasLen(fromDate, 10, 30) || !strHasLen(toDate, 10, 30) {
