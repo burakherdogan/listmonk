@@ -727,6 +727,17 @@ body.is-noscroll {
     background: #fff1f0;
   }
 
+  // Subscriber activity events. The hues mirror the analytics timeline chart
+  // (opens = primary blue, clicks = amber), muted down for use as tags.
+  &.opened {
+    color: #2c5aa8;
+    background: #e9eefa;
+  }
+  &.clicked {
+    color: #8a6206;
+    background: #fdf2dc;
+  }
+
   sup {
     font-weight: $weight-semibold;
     letter-spacing: 0.03em;
@@ -949,6 +960,23 @@ section.analytics {
       display: block;
       font-size: $size-7;
       color: $grey;
+    }
+
+    .clicked-links {
+      margin: 5px 0 0 0;
+      list-style: none;
+      font-size: $size-7;
+
+      li {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .count {
+        color: $grey;
+        white-space: nowrap;
+        margin-left: 5px;
+      }
     }
 
     .activity-filters {

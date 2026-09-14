@@ -469,3 +469,203 @@ clicks AS (
 SELECT
     COALESCE((SELECT JSON_AGG(v) FROM views v), '[]') as campaign_views,
     COALESCE((SELECT JSON_AGG(c) FROM clicks c), '[]') as link_clicks;
+
+-- name: get-subscribers-activity
+-- One row per subscriber across all campaigns, ranked by engagement. Empty date bounds mean all time.
+-- $1 is the list IDs the user is permitted to see; an empty array means unrestricted.
+WITH views AS (
+    SELECT subscriber_id, COUNT(*) AS num,
+           MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM campaign_views
+    WHERE subscriber_id IS NOT NULL AND NOT is_bot
+      AND created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY subscriber_id
+),
+clicks AS (
+    SELECT subscriber_id, COUNT(*) AS num, COUNT(DISTINCT link_id) AS links,
+           MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM link_clicks
+    WHERE subscriber_id IS NOT NULL AND NOT is_bot
+      AND created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY subscriber_id
+),
+bounced AS (
+    SELECT subscriber_id, COUNT(*) AS num,
+           (ARRAY_AGG(type ORDER BY created_at DESC))[1]::TEXT AS last_type,
+           MAX(created_at) AS last_at
+    FROM bounces
+    WHERE created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY subscriber_id
+)
+SELECT COUNT(*) OVER () AS total,
+       subscribers.id AS subscriber_id,
+       subscribers.email,
+       subscribers.name AS subscriber_name,
+       subscribers.status::TEXT AS subscriber_status,
+       COALESCE(views.num, 0) AS views,
+       COALESCE(clicks.num, 0) AS clicks,
+       COALESCE(clicks.links, 0) AS links,
+       COALESCE(bounced.num, 0) AS bounces,
+       COALESCE(bounced.last_type, '') AS bounce_type,
+       LEAST(views.first_at, clicks.first_at) AS first_at,
+       GREATEST(views.last_at, clicks.last_at, bounced.last_at) AS last_at
+    FROM subscribers
+    LEFT JOIN views ON (views.subscriber_id = subscribers.id)
+    LEFT JOIN clicks ON (clicks.subscriber_id = subscribers.id)
+    LEFT JOIN bounced ON (bounced.subscriber_id = subscribers.id)
+    WHERE (views.subscriber_id IS NOT NULL OR clicks.subscriber_id IS NOT NULL OR bounced.subscriber_id IS NOT NULL)
+      AND (CARDINALITY($1::INT[]) = 0 OR EXISTS (
+             SELECT 1 FROM subscriber_lists
+             WHERE subscriber_lists.subscriber_id = subscribers.id AND subscriber_lists.list_id = ANY($1::INT[])
+           ))
+      AND (CASE $4::TEXT
+             WHEN 'opened'  THEN views.subscriber_id IS NOT NULL
+             WHEN 'clicked' THEN clicks.subscriber_id IS NOT NULL
+             WHEN 'bounced' THEN bounced.subscriber_id IS NOT NULL
+             ELSE TRUE
+           END)
+      AND ($5::TEXT = '' OR subscribers.email ILIKE $5 OR subscribers.name ILIKE $5)
+    ORDER BY (COALESCE(views.num, 0) + COALESCE(clicks.num, 0)) DESC, last_at DESC NULLS LAST, subscribers.id
+    OFFSET $6 LIMIT (CASE WHEN $7 < 1 THEN NULL ELSE $7 END);
+
+-- name: get-subscribers-activity-charts
+-- Aggregate engagement shape across all subscribers. $1 is the permitted list IDs; empty means unrestricted.
+WITH perm AS (
+    SELECT id, created_at FROM subscribers
+    WHERE CARDINALITY($1::INT[]) = 0 OR EXISTS (
+             SELECT 1 FROM subscriber_lists
+             WHERE subscriber_lists.subscriber_id = subscribers.id
+               AND subscriber_lists.list_id = ANY($1::INT[])
+           )
+),
+-- Subscribers added after the last campaign went out were never mailed, so counting them
+-- as unengaged would be wrong. They get their own bucket.
+last_send AS (
+    SELECT MAX(started_at) AS at FROM campaigns WHERE started_at IS NOT NULL
+),
+events AS (
+    SELECT subscriber_id, created_at, FALSE AS is_click FROM campaign_views WHERE subscriber_id IS NOT NULL AND NOT is_bot
+    UNION ALL
+    SELECT subscriber_id, created_at, TRUE AS is_click FROM link_clicks WHERE subscriber_id IS NOT NULL AND NOT is_bot
+),
+-- Recency ignores the date filter on purpose. "Days since last activity" is only meaningful
+-- against the present, and the LEFT JOIN keeps subscribers with no activity at all.
+last_activity AS (
+    SELECT perm.id, perm.created_at, MAX(events.created_at) AS last_at
+    FROM perm LEFT JOIN events ON events.subscriber_id = perm.id
+    GROUP BY perm.id, perm.created_at
+),
+recency AS (
+    SELECT CASE WHEN last_at IS NULL AND created_at > COALESCE((SELECT at FROM last_send), '-infinity') THEN 'notsent'
+                WHEN last_at IS NULL THEN 'never'
+                WHEN last_at >= NOW() - INTERVAL '7 days' THEN 'd7'
+                WHEN last_at >= NOW() - INTERVAL '30 days' THEN 'd30'
+                WHEN last_at >= NOW() - INTERVAL '90 days' THEN 'd90'
+                WHEN last_at >= NOW() - INTERVAL '180 days' THEN 'd180'
+                ELSE 'older' END AS bucket,
+           COUNT(*) AS num
+    FROM last_activity GROUP BY 1
+),
+-- Bucket width follows the selected window. Fixed monthly buckets collapse a 7 or 30 day
+-- range into one or two points, which draws an empty chart.
+granularity AS (
+    SELECT CASE
+        WHEN NULLIF($2, '') IS NULL THEN 'month'
+        WHEN EXTRACT(EPOCH FROM (COALESCE(NULLIF($3, '')::TIMESTAMPTZ, NOW()) - $2::TIMESTAMPTZ)) / 86400 > 92
+            THEN 'month'
+        ELSE 'day'
+    END AS unit
+),
+-- Unique subscribers per bucket, not raw event counts, so the trend shows audience decay.
+timeline AS (
+    SELECT DATE_TRUNC((SELECT unit FROM granularity), events.created_at) AS period,
+           COUNT(DISTINCT events.subscriber_id) FILTER (WHERE NOT is_click) AS views,
+           COUNT(DISTINCT events.subscriber_id) FILTER (WHERE is_click) AS clicks
+    FROM events JOIN perm ON perm.id = events.subscriber_id
+    WHERE events.created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND events.created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY 1
+)
+SELECT
+    (SELECT unit FROM granularity) AS granularity,
+    COALESCE((SELECT JSON_AGG(JSON_BUILD_OBJECT('bucket', bucket, 'count', num)
+              ORDER BY ARRAY_POSITION(ARRAY['d7', 'd30', 'd90', 'd180', 'older', 'never', 'notsent'], bucket))
+              FROM recency), '[]') AS recency,
+    COALESCE((SELECT JSON_AGG(JSON_BUILD_OBJECT('period', period, 'views', views, 'clicks', clicks) ORDER BY period)
+              FROM timeline), '[]') AS timeline;
+
+-- name: get-subscriber-campaign-activity
+-- One row per campaign for a single subscriber. Empty when privacy.individual_tracking is off.
+WITH views AS (
+    SELECT campaign_id, COUNT(*) AS num,
+           MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM campaign_views
+    WHERE subscriber_id = $1 AND NOT is_bot
+      AND created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY campaign_id
+),
+clicks AS (
+    SELECT campaign_id, COUNT(*) AS num, COUNT(DISTINCT link_id) AS links,
+           MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM link_clicks
+    WHERE subscriber_id = $1 AND campaign_id IS NOT NULL AND NOT is_bot
+      AND created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY campaign_id
+),
+bounced AS (
+    SELECT campaign_id, COUNT(*) AS num,
+           (ARRAY_AGG(type ORDER BY created_at DESC))[1]::TEXT AS last_type,
+           MAX(created_at) AS last_at
+    FROM bounces
+    WHERE subscriber_id = $1 AND campaign_id IS NOT NULL
+      AND created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+      AND created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+    GROUP BY campaign_id
+),
+clicked_links AS (
+    SELECT campaign_id,
+           JSON_AGG(JSON_BUILD_OBJECT('url', url, 'count', num, 'last_at', last_at)
+                    ORDER BY num DESC, url) AS items
+    FROM (
+        SELECT link_clicks.campaign_id, links.url,
+               COUNT(*) AS num, MAX(link_clicks.created_at) AS last_at
+        FROM link_clicks
+        JOIN links ON (links.id = link_clicks.link_id)
+        WHERE link_clicks.subscriber_id = $1 AND link_clicks.campaign_id IS NOT NULL AND NOT link_clicks.is_bot
+          AND link_clicks.created_at >= COALESCE(NULLIF($2, '')::TIMESTAMPTZ, '-infinity'::TIMESTAMPTZ)
+          AND link_clicks.created_at <= COALESCE(NULLIF($3, '')::TIMESTAMPTZ, 'infinity'::TIMESTAMPTZ)
+        GROUP BY link_clicks.campaign_id, links.url
+    ) t
+    GROUP BY campaign_id
+)
+SELECT COUNT(*) OVER () AS total,
+       campaigns.id AS campaign_id,
+       campaigns.name AS campaign_name,
+       campaigns.subject AS campaign_subject,
+       COALESCE(views.num, 0) AS views,
+       COALESCE(clicks.num, 0) AS clicks,
+       COALESCE(clicks.links, 0) AS links,
+       COALESCE(bounced.num, 0) AS bounces,
+       COALESCE(bounced.last_type, '') AS bounce_type,
+       COALESCE(clicked_links.items, '[]') AS clicked_links,
+       LEAST(views.first_at, clicks.first_at) AS first_at,
+       GREATEST(views.last_at, clicks.last_at, bounced.last_at) AS last_at
+    FROM campaigns
+    LEFT JOIN views ON (views.campaign_id = campaigns.id)
+    LEFT JOIN clicks ON (clicks.campaign_id = campaigns.id)
+    LEFT JOIN bounced ON (bounced.campaign_id = campaigns.id)
+    LEFT JOIN clicked_links ON (clicked_links.campaign_id = campaigns.id)
+    WHERE (views.campaign_id IS NOT NULL OR clicks.campaign_id IS NOT NULL OR bounced.campaign_id IS NOT NULL)
+      AND (CASE $4::TEXT
+             WHEN 'opened'  THEN views.campaign_id IS NOT NULL
+             WHEN 'clicked' THEN clicks.campaign_id IS NOT NULL
+             WHEN 'bounced' THEN bounced.campaign_id IS NOT NULL
+             ELSE TRUE
+           END)
+    ORDER BY last_at DESC, campaigns.id
+    OFFSET $5 LIMIT (CASE WHEN $6 < 1 THEN NULL ELSE $6 END);

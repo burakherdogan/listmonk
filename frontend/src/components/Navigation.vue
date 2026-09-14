@@ -37,10 +37,19 @@
       <b-menu-item v-if="$can('templates:get')" :to="{ name: 'templates' }" tag="router-link"
         :active="activeItem.templates" data-cy="templates" icon="file-image-outline"
         :label="$t('globals.terms.templates')" />
-      <b-menu-item v-if="$can('campaigns:get_analytics')" :to="{ name: 'campaignAnalytics' }" tag="router-link"
-        :active="activeItem.campaignAnalytics" data-cy="analytics" icon="chart-bar"
-        :label="$t('globals.terms.analytics')" />
     </b-menu-item><!-- campaigns -->
+
+    <b-menu-item v-if="$can('campaigns:get_analytics', 'subscribers:get_all', 'subscribers:get')"
+      :expanded="activeGroup.analytics" :active="activeGroup.analytics" data-cy="analytics"
+      @update:active="(state) => toggleGroup('analytics', state)" icon="chart-bar"
+      :label="$t('globals.terms.analytics')">
+      <b-menu-item v-if="$can('campaigns:get_analytics')" :to="{ name: 'campaignAnalytics' }" tag="router-link"
+        :active="activeItem.campaignAnalytics" data-cy="campaign-analytics" icon="rocket-launch-outline"
+        :label="$t('globals.terms.campaigns')" />
+      <b-menu-item v-if="$can('subscribers:get_all', 'subscribers:get')" :to="{ name: 'subscriberAnalytics' }"
+        tag="router-link" :active="activeItem.subscriberAnalytics" data-cy="subscriber-analytics"
+        icon="account-multiple" :label="$t('globals.terms.subscribers')" />
+    </b-menu-item><!-- analytics -->
 
     <b-menu-item v-if="$can('users:*', 'roles:*')" :expanded="activeGroup.users" :active="activeGroup.users"
       data-cy="users" @update:active="(state) => toggleGroup('users', state)" icon="account-multiple"

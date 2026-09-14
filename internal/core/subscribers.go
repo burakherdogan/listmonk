@@ -228,6 +228,81 @@ func (c *Core) GetSubscriberActivity(id int) (models.SubscriberActivity, error) 
 	return out, nil
 }
 
+// GetSubscribersActivity returns subscribers ranked by their campaign engagement with a total count.
+// listIDs restricts the results to subscribers on those lists; an empty slice means unrestricted.
+func (c *Core) GetSubscribersActivity(listIDs []int, fromDate, toDate, event, search string, offset, limit int) ([]models.SubscriberActivitySummary, int, error) {
+	if !validOptionalDate(fromDate) || !validOptionalDate(toDate) {
+		return nil, 0, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
+	}
+
+	// Required for pq.Array(). A nil slice becomes SQL NULL, which makes the
+	// CARDINALITY() = 0 check in the query evaluate to NULL and drop every row.
+	if listIDs == nil {
+		listIDs = []int{}
+	}
+
+	if search != "" {
+		search = "%" + search + "%"
+	}
+
+	out := []models.SubscriberActivitySummary{}
+	if err := c.q.GetSubscribersActivity.Select(&out, pq.Array(listIDs), fromDate, toDate, event, search, offset, limit); err != nil {
+		c.log.Printf("error fetching subscribers activity: %v", err)
+		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+
+	total := 0
+	if len(out) > 0 {
+		total = out[0].Total
+	}
+
+	return out, total, nil
+}
+
+// GetSubscribersActivityCharts returns aggregate engagement shapes for charting.
+// listIDs restricts the results to subscribers on those lists; an empty slice means unrestricted.
+func (c *Core) GetSubscribersActivityCharts(listIDs []int, fromDate, toDate string) (models.SubscribersActivityCharts, error) {
+	if !validOptionalDate(fromDate) || !validOptionalDate(toDate) {
+		return models.SubscribersActivityCharts{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
+	}
+
+	// Required for pq.Array(). See GetSubscribersActivity().
+	if listIDs == nil {
+		listIDs = []int{}
+	}
+
+	var out models.SubscribersActivityCharts
+	if err := c.q.GetSubscribersActivityCharts.Get(&out, pq.Array(listIDs), fromDate, toDate); err != nil {
+		c.log.Printf("error fetching subscribers activity charts: %v", err)
+		return models.SubscribersActivityCharts{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+
+	return out, nil
+}
+
+// GetSubscriberCampaignActivity returns a subscriber's per-campaign views, clicks and bounces with a total count.
+func (c *Core) GetSubscriberCampaignActivity(id int, fromDate, toDate, event string, offset, limit int) ([]models.SubscriberCampaignActivity, int, error) {
+	if !validOptionalDate(fromDate) || !validOptionalDate(toDate) {
+		return nil, 0, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
+	}
+
+	out := []models.SubscriberCampaignActivity{}
+	if err := c.q.GetSubscriberCampaignActivity.Select(&out, id, fromDate, toDate, event, offset, limit); err != nil {
+		c.log.Printf("error fetching subscriber campaign activity: %v", err)
+		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+
+	total := 0
+	if len(out) > 0 {
+		total = out[0].Total
+	}
+
+	return out, total, nil
+}
+
 // ExportSubscribers returns an iterator function that provides lists of subscribers based
 // on the given criteria in an exportable form. The iterator function returned can be called
 // repeatedly until there are nil subscribers. It's an iterator because exports can be extremely

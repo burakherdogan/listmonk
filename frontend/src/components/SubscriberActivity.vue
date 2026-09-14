@@ -53,7 +53,7 @@
             <span class="tag is-light">{{ props.row.viewCount }}</span>
           </b-table-column>
 
-          <b-table-column v-slot="props" field="lastViewedAt" :label="$t('globals.fields.createdAt')" sortable>
+          <b-table-column v-slot="props" field="lastViewedAt" :label="$t('analytics.lastActivity')" sortable>
             <span v-if="props.row.lastViewedAt">
               {{ $utils.niceDate(props.row.lastViewedAt, true) }}
             </span>
@@ -96,7 +96,7 @@
             <span class="tag is-light">{{ props.row.clickCount }}</span>
           </b-table-column>
 
-          <b-table-column v-slot="props" field="lastClickedAt" :label="$t('globals.fields.createdAt')" sortable>
+          <b-table-column v-slot="props" field="lastClickedAt" :label="$t('analytics.lastActivity')" sortable>
             <span v-if="props.row.lastClickedAt">
               {{ $utils.niceDate(props.row.lastClickedAt, true) }}
             </span>

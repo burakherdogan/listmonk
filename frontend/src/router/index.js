@@ -60,6 +60,12 @@ const routes = [
     component: () => import('../views/Subscribers.vue'),
   },
   {
+    path: '/subscribers/analytics',
+    name: 'subscriberAnalytics',
+    meta: { title: 'globals.terms.analytics', group: 'analytics' },
+    component: () => import('../views/SubscriberAnalytics.vue'),
+  },
+  {
     path: '/subscribers/:id',
     name: 'subscriber',
     meta: { title: 'globals.terms.subscribers', group: 'subscribers' },
@@ -86,7 +92,7 @@ const routes = [
   {
     path: '/campaigns/analytics',
     name: 'campaignAnalytics',
-    meta: { title: 'analytics.title', group: 'campaigns' },
+    meta: { title: 'analytics.title', group: 'analytics' },
     component: () => import('../views/CampaignAnalytics.vue'),
   },
   {

@@ -207,3 +207,8 @@ func sanitizeSQLExp(q string) string {
 func strHasLen(str string, min, max int) bool {
 	return len(str) >= min && len(str) <= max
 }
+
+// validOptionalDate accepts an empty date, which callers treat as an unbounded range.
+func validOptionalDate(str string) bool {
+	return str == "" || strHasLen(str, 10, 30)
+}

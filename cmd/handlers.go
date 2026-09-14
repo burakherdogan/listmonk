@@ -115,8 +115,11 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.GET("/api/about", a.GetAboutInfo)
 
 		g.GET("/api/subscribers", pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get"))
+		g.GET("/api/subscribers/analytics", pm(a.GetSubscribersAnalytics, "subscribers:get_all", "subscribers:get"))
+		g.GET("/api/subscribers/analytics/charts", pm(a.GetSubscribersAnalyticsCharts, "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id", pm(hasID(a.GetSubscriber), "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id/activity", pm(hasID(a.GetSubscriberActivity), "subscribers:get_all", "subscribers:get"))
+		g.GET("/api/subscribers/:id/analytics", pm(hasID(a.GetSubscriberAnalytics), "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id/export", pm(hasID(a.ExportSubscriberData), "subscribers:get_all", "subscribers:get"))
 		g.GET("/api/subscribers/:id/bounces", pm(hasID(a.GetSubscriberBounces), "bounces:get"))
 		g.DELETE("/api/subscribers/:id/bounces", pm(hasID(a.DeleteSubscriberBounces), "bounces:manage"))

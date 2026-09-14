@@ -174,6 +174,21 @@ export const getSubscriber = async (id) => http.get(
   { loading: models.subscribers },
 );
 
+export const getSubscribersAnalytics = async (params) => http.get(
+  '/api/subscribers/analytics',
+  { params, loading: models.subscribers },
+);
+
+export const getSubscribersAnalyticsCharts = async (params) => http.get(
+  '/api/subscribers/analytics/charts',
+  { params, loading: models.subscribers },
+);
+
+export const getSubscriberAnalytics = async (id, params) => http.get(
+  `/api/subscribers/${id}/analytics`,
+  { params, loading: models.subscribers },
+);
+
 export const getSubscriberActivity = async (id) => http.get(
   `/api/subscribers/${id}/activity`,
   { loading: models.subscribers },

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/types"
@@ -133,4 +134,40 @@ type SubscriberExportProfile struct {
 type SubscriberActivity struct {
 	CampaignViews json.RawMessage `db:"campaign_views" json:"campaign_views"`
 	LinkClicks    json.RawMessage `db:"link_clicks" json:"link_clicks"`
+}
+
+type SubscribersActivityCharts struct {
+	Granularity string          `db:"granularity" json:"granularity"`
+	Recency     json.RawMessage `db:"recency" json:"recency"`
+	Timeline    json.RawMessage `db:"timeline" json:"timeline"`
+}
+
+type SubscriberActivitySummary struct {
+	Total            int        `db:"total" json:"-"`
+	SubscriberID     int        `db:"subscriber_id" json:"subscriber_id"`
+	Email            string     `db:"email" json:"email"`
+	SubscriberName   string     `db:"subscriber_name" json:"name"`
+	SubscriberStatus string     `db:"subscriber_status" json:"subscriber_status"`
+	Views            int        `db:"views" json:"views"`
+	Clicks           int        `db:"clicks" json:"clicks"`
+	Links            int        `db:"links" json:"links"`
+	Bounces          int        `db:"bounces" json:"bounces"`
+	BounceType       string     `db:"bounce_type" json:"bounce_type"`
+	FirstAt          *time.Time `db:"first_at" json:"first_at"`
+	LastAt           *time.Time `db:"last_at" json:"last_at"`
+}
+
+type SubscriberCampaignActivity struct {
+	Total           int             `db:"total" json:"-"`
+	CampaignID      int             `db:"campaign_id" json:"campaign_id"`
+	CampaignName    string          `db:"campaign_name" json:"campaign_name"`
+	CampaignSubject string          `db:"campaign_subject" json:"campaign_subject"`
+	Views           int             `db:"views" json:"views"`
+	Clicks          int             `db:"clicks" json:"clicks"`
+	Links           int             `db:"links" json:"links"`
+	Bounces         int             `db:"bounces" json:"bounces"`
+	BounceType      string          `db:"bounce_type" json:"bounce_type"`
+	ClickedLinks    json.RawMessage `db:"clicked_links" json:"clicked_links"`
+	FirstAt         *time.Time      `db:"first_at" json:"first_at"`
+	LastAt          *time.Time      `db:"last_at" json:"last_at"`
 }

@@ -95,6 +95,91 @@ func (a *App) GetSubscriberActivity(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{out})
 }
 
+// GetSubscribersAnalyticsCharts handles the retrieval of aggregate engagement charts.
+func (a *App) GetSubscribersAnalyticsCharts(c echo.Context) error {
+	user := auth.GetUser(c)
+
+	// Restrict the results to the lists the user is permitted to see.
+	listIDs, err := a.filterListQueryByPerm("list_id", c.QueryParams(), user)
+	if err != nil {
+		return err
+	}
+
+	out, err := a.core.GetSubscribersActivityCharts(listIDs,
+		c.QueryParams().Get("from"), c.QueryParams().Get("to"))
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, okResp{out})
+}
+
+// GetSubscribersAnalytics handles the retrieval of subscribers ranked by campaign engagement.
+func (a *App) GetSubscribersAnalytics(c echo.Context) error {
+	user := auth.GetUser(c)
+
+	// Restrict the results to the lists the user is permitted to see.
+	listIDs, err := a.filterListQueryByPerm("list_id", c.QueryParams(), user)
+	if err != nil {
+		return err
+	}
+
+	event := c.QueryParams().Get("event")
+	switch event {
+	case "", "opened", "clicked", "bounced":
+	default:
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+	}
+
+	pg := a.pg.NewFromURL(c.Request().URL.Query())
+
+	res, total, err := a.core.GetSubscribersActivity(listIDs, c.QueryParams().Get("from"),
+		c.QueryParams().Get("to"), event, strings.TrimSpace(c.QueryParams().Get("search")), pg.Offset, pg.Limit)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, okResp{models.PageResults{
+		Results: res,
+		Total:   total,
+		Page:    pg.Page,
+		PerPage: pg.PerPage,
+	}})
+}
+
+// GetSubscriberAnalytics handles the retrieval of a subscriber's per-campaign activity.
+func (a *App) GetSubscriberAnalytics(c echo.Context) error {
+	user := auth.GetUser(c)
+
+	// Check if the user has access to at least one of the lists on the subscriber.
+	id := getID(c)
+	if err := a.hasSubPerm(user, []int{id}); err != nil {
+		return err
+	}
+
+	event := c.QueryParams().Get("event")
+	switch event {
+	case "", "opened", "clicked", "bounced":
+	default:
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+	}
+
+	pg := a.pg.NewFromURL(c.Request().URL.Query())
+
+	res, total, err := a.core.GetSubscriberCampaignActivity(id, c.QueryParams().Get("from"),
+		c.QueryParams().Get("to"), event, pg.Offset, pg.Limit)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, okResp{models.PageResults{
+		Results: res,
+		Total:   total,
+		Page:    pg.Page,
+		PerPage: pg.PerPage,
+	}})
+}
+
 // QuerySubscribers handles querying subscribers based on an arbitrary SQL expression.
 func (a *App) QuerySubscribers(c echo.Context) error {
 	// Get the authenticated user.
