@@ -721,7 +721,7 @@ body.is-noscroll {
     color: $green;
     background: #dcfce7;
   }
-  &.blocklisted, &.cancelled, &.status-unsubscribed, &.campaign_visual {
+  &.blocklisted, &.cancelled, &.status-unsubscribed, &.campaign_visual, &.bounced {
     $color: $red;
     color: $color;
     background: #fff1f0;
@@ -942,6 +942,43 @@ section.analytics {
 
   .donut-container {
     position: relative;
+  }
+
+  .subscriber-activity {
+    .subscriber-meta {
+      display: block;
+      font-size: $size-7;
+      color: $grey;
+    }
+
+    .activity-filters {
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .activity-search {
+      max-width: 240px;
+    }
+
+    @media screen and (max-width: 768px) {
+      .activity-search {
+        max-width: none;
+      }
+
+      .table-wrapper.has-mobile-cards td {
+        flex-wrap: wrap;
+
+        &::before {
+          white-space: nowrap;
+          padding-right: 15px;
+        }
+      }
+
+      .subscriber-meta {
+        flex-basis: 100%;
+        text-align: right;
+      }
+    }
   }
 }
 

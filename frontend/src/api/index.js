@@ -322,6 +322,11 @@ export const getCampaignLinkCounts = async (params) => http.get(
   { params, loading: models.campaigns },
 );
 
+export const getCampaignSubscriberActivity = async (params) => http.get(
+  '/api/campaigns/analytics/subscribers',
+  { params, loading: models.campaigns },
+);
+
 export const convertCampaignContent = async (data) => http.post(
   `/api/campaigns/${data.id}/content`,
   data,

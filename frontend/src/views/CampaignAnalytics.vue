@@ -49,6 +49,68 @@
       </div><!-- columns -->
     </form>
 
+    <section class="subscriber-activity mt-5" v-if="serverConfig.privacy.individual_tracking">
+      <h4>
+        {{ $t('analytics.subscriberActivity') }}
+        <span class="has-text-grey-light">({{ $utils.niceNumber(subscribers.total) }})</span>
+      </h4>
+
+      <div class="activity-filters is-flex is-align-items-center mb-4">
+        <b-field class="mb-0">
+          <b-radio-button v-for="e in ['', 'opened', 'clicked', 'bounced']" :key="e" v-model="subscribers.event"
+            :native-value="e" size="is-small" @input="onSubscribersFilter">
+            {{ e ? $t(`analytics.${e}`) : $t('analytics.allEvents') }}
+          </b-radio-button>
+        </b-field>
+
+        <b-input v-model="subscribers.search" class="activity-search mb-0" size="is-small" icon="magnify" expanded
+          :placeholder="$t('subscribers.email')" @keyup.native.enter="onSubscribersFilter" />
+      </div>
+
+      <b-table :data="subscribers.results" :loading="subscribers.loading" backend-pagination
+        :paginated="subscribers.total > subscribers.perPage" pagination-size="is-small" pagination-rounded
+        @page-change="onSubscribersPageChange" :current-page="subscribers.page" :per-page="subscribers.perPage"
+        :total="subscribers.total" hoverable>
+        <b-table-column v-slot="props" field="email" :label="$t('subscribers.email')">
+          <router-link :to="{ name: 'subscriber', params: { id: props.row.subscriberId } }">
+            {{ props.row.email }}
+          </router-link>
+          <b-tag v-if="props.row.subscriberStatus !== 'enabled'" :class="props.row.subscriberStatus" class="is-small">
+            {{ $t(`subscribers.status.${props.row.subscriberStatus}`) }}
+          </b-tag>
+          <span v-if="props.row.name" class="subscriber-meta">{{ props.row.name }}</span>
+        </b-table-column>
+
+        <b-table-column v-slot="props" field="events" :label="$t('analytics.events')">
+          <b-taglist>
+            <b-tag v-if="props.row.views > 0" class="is-small">
+              {{ $t('analytics.opened') }} &times;{{ props.row.views }}
+            </b-tag>
+            <b-tag v-if="props.row.clicks > 0" class="is-small">
+              {{ $t('analytics.clicked') }} &times;{{ props.row.clicks }}
+              <template v-if="props.row.links > 1"> ({{ props.row.links }})</template>
+            </b-tag>
+            <b-tag v-if="props.row.bounces > 0" class="is-small bounced">
+              {{ $t('analytics.bounced') }} ({{ props.row.bounceType }})
+            </b-tag>
+          </b-taglist>
+        </b-table-column>
+
+        <b-table-column v-slot="props" field="lastAt" :label="$t('analytics.lastActivity')" width="220">
+          <span :title="$utils.niceDate(props.row.lastAt, true)">
+            {{ $utils.getDate(props.row.lastAt).fromNow() }}
+          </span>
+          <span v-if="props.row.firstAt" class="subscriber-meta">
+            {{ $t('analytics.firstActivity') }}: {{ $utils.getDate(props.row.firstAt).fromNow() }}
+          </span>
+        </b-table-column>
+
+        <template #empty>
+          <empty-placeholder />
+        </template>
+      </b-table>
+    </section>
+
     <section class="charts mt-5">
       <div class="chart" v-for="(v, k) in charts" :key="k">
         <div class="columns">
@@ -75,6 +137,7 @@ import Vue from 'vue';
 import { mapState } from 'vuex';
 import { colors } from '../constants';
 import Chart from '../components/Chart.vue';
+import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
 const chartColorRed = '#ee7d5b';
 const chartColors = [
@@ -91,6 +154,7 @@ const chartColors = [
 export default Vue.extend({
   components: {
     Chart,
+    EmptyPlaceholder,
   },
 
   data() {
@@ -144,6 +208,16 @@ export default Vue.extend({
           chartFn: this.makeLinksChart,
           onClick: this.onLinkClick,
         },
+      },
+
+      subscribers: {
+        results: [],
+        total: 0,
+        page: 1,
+        perPage: 20,
+        loading: false,
+        event: '',
+        search: '',
       },
 
       form: {
@@ -282,6 +356,37 @@ export default Vue.extend({
       });
     },
 
+    getSubscribers(camps) {
+      this.subscribers.loading = true;
+
+      this.$api.getCampaignSubscriberActivity({
+        id: camps.map((c) => c.id),
+        from: this.form.from,
+        to: this.form.to,
+        event: this.subscribers.event,
+        search: this.subscribers.search,
+        page: this.subscribers.page,
+        per_page: this.subscribers.perPage,
+      }).then((data) => {
+        this.subscribers.results = data.results;
+        this.subscribers.total = data.total;
+        this.subscribers.perPage = data.perPage;
+        this.subscribers.loading = false;
+      }).catch(() => {
+        this.subscribers.loading = false;
+      });
+    },
+
+    onSubscribersPageChange(page) {
+      this.subscribers.page = page;
+      this.getSubscribers(this.form.campaigns);
+    },
+
+    onSubscribersFilter() {
+      this.subscribers.page = 1;
+      this.getSubscribers(this.form.campaigns);
+    },
+
     onLinkClick(e) {
       const bars = e.chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
       if (bars.length > 0) {
@@ -331,6 +436,11 @@ export default Vue.extend({
             // Fetch views, clicks, bounces for every campaign.
             this.getData(k, this.form.campaigns);
           });
+
+          if (this.serverConfig.privacy.individual_tracking) {
+            this.subscribers.page = 1;
+            this.getSubscribers(this.form.campaigns);
+          }
         });
       });
     }

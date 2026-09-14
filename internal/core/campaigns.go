@@ -421,6 +421,31 @@ func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate st
 	return out, nil
 }
 
+// GetCampaignSubscriberActivity returns per-subscriber open and click counts with a total count.
+func (c *Core) GetCampaignSubscriberActivity(campIDs []int, fromDate, toDate, event, search string, offset, limit int) ([]models.CampaignSubscriberActivity, int, error) {
+	if !strHasLen(fromDate, 10, 30) || !strHasLen(toDate, 10, 30) {
+		return nil, 0, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
+	}
+
+	if search != "" {
+		search = "%" + search + "%"
+	}
+
+	out := []models.CampaignSubscriberActivity{}
+	if err := c.q.GetCampaignSubscriberActivity.Select(&out, pq.Array(campIDs), fromDate, toDate, event, search, offset, limit); err != nil {
+		c.log.Printf("error fetching campaign subscriber activity: %v", err)
+		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+
+	total := 0
+	if len(out) > 0 {
+		total = out[0].Total
+	}
+
+	return out, total, nil
+}
+
 // RegisterCampaignView registers a subscriber's view on a campaign.
 func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
 	if _, err := c.q.RegisterCampaignView.Exec(campUUID, subUUID); err != nil {

@@ -80,6 +80,22 @@ type CampaignAnalyticsLink struct {
 	Count int    `db:"count" json:"count"`
 }
 
+type CampaignSubscriberActivity struct {
+	Total            int        `db:"total" json:"-"`
+	SubscriberID     int        `db:"subscriber_id" json:"subscriber_id"`
+	SubscriberUUID   string     `db:"subscriber_uuid" json:"subscriber_uuid"`
+	Email            string     `db:"email" json:"email"`
+	SubscriberName   string     `db:"subscriber_name" json:"name"`
+	SubscriberStatus string     `db:"subscriber_status" json:"subscriber_status"`
+	Views            int        `db:"views" json:"views"`
+	Clicks           int        `db:"clicks" json:"clicks"`
+	Links            int        `db:"links" json:"links"`
+	Bounces          int        `db:"bounces" json:"bounces"`
+	BounceType       string     `db:"bounce_type" json:"bounce_type"`
+	FirstAt          *time.Time `db:"first_at" json:"first_at"`
+	LastAt           *time.Time `db:"last_at" json:"last_at"`
+}
+
 type CampaignViewExport struct {
 	CampaignID     int       `db:"campaign_id"`
 	CampaignUUID   string    `db:"campaign_uuid"`

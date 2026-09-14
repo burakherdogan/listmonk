@@ -634,6 +634,31 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("analytics.invalidDates"))
 	}
 
+	// Per-subscriber rows are paginated as they are unbounded.
+	if typ == "subscribers" {
+		pg := a.pg.NewFromURL(c.Request().URL.Query())
+
+		event := c.QueryParams().Get("event")
+		switch event {
+		case "", "opened", "clicked", "bounced":
+		default:
+			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		}
+
+		res, total, err := a.core.GetCampaignSubscriberActivity(ids, from, to, event,
+			strings.TrimSpace(c.QueryParams().Get("search")), pg.Offset, pg.Limit)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, okResp{models.PageResults{
+			Results: res,
+			Total:   total,
+			Page:    pg.Page,
+			PerPage: pg.PerPage,
+		}})
+	}
+
 	// Campaign link stats.
 	if typ == "links" {
 		out, err := a.core.GetCampaignAnalyticsLinks(ids, typ, from, to)

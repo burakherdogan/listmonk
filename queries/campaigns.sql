@@ -275,6 +275,58 @@ SELECT COUNT(%s) AS "count", url
     WHERE campaign_id=ANY($1) AND link_clicks.created_at >= $2 AND link_clicks.created_at <= $3
     GROUP BY links.url ORDER BY "count" DESC LIMIT 50;
 
+-- name: get-campaign-subscriber-activity
+-- One row per subscriber. Empty when privacy.individual_tracking is off.
+WITH views AS (
+    SELECT subscriber_id, COUNT(*) AS num,
+           MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM campaign_views
+    WHERE campaign_id = ANY($1) AND created_at >= $2 AND created_at <= $3 AND subscriber_id IS NOT NULL
+    GROUP BY subscriber_id
+),
+clicks AS (
+    SELECT subscriber_id, COUNT(*) AS num, COUNT(DISTINCT link_id) AS links,
+           MIN(created_at) AS first_at, MAX(created_at) AS last_at
+    FROM link_clicks
+    WHERE campaign_id = ANY($1) AND created_at >= $2 AND created_at <= $3 AND subscriber_id IS NOT NULL
+    GROUP BY subscriber_id
+),
+bounced AS (
+    SELECT subscriber_id, COUNT(*) AS num,
+           (ARRAY_AGG(type ORDER BY created_at DESC))[1]::TEXT AS last_type,
+           MAX(created_at) AS last_at
+    FROM bounces
+    WHERE campaign_id = ANY($1) AND created_at >= $2 AND created_at <= $3
+    GROUP BY subscriber_id
+)
+SELECT COUNT(*) OVER () AS total,
+       subscribers.id AS subscriber_id,
+       subscribers.uuid::TEXT AS subscriber_uuid,
+       subscribers.email,
+       subscribers.name AS subscriber_name,
+       subscribers.status::TEXT AS subscriber_status,
+       COALESCE(views.num, 0) AS views,
+       COALESCE(clicks.num, 0) AS clicks,
+       COALESCE(clicks.links, 0) AS links,
+       COALESCE(bounced.num, 0) AS bounces,
+       COALESCE(bounced.last_type, '') AS bounce_type,
+       LEAST(views.first_at, clicks.first_at) AS first_at,
+       GREATEST(views.last_at, clicks.last_at, bounced.last_at) AS last_at
+    FROM subscribers
+    LEFT JOIN views ON (views.subscriber_id = subscribers.id)
+    LEFT JOIN clicks ON (clicks.subscriber_id = subscribers.id)
+    LEFT JOIN bounced ON (bounced.subscriber_id = subscribers.id)
+    WHERE (views.subscriber_id IS NOT NULL OR clicks.subscriber_id IS NOT NULL OR bounced.subscriber_id IS NOT NULL)
+      AND (CASE $4::TEXT
+             WHEN 'opened'  THEN views.subscriber_id IS NOT NULL
+             WHEN 'clicked' THEN clicks.subscriber_id IS NOT NULL
+             WHEN 'bounced' THEN bounced.subscriber_id IS NOT NULL
+             ELSE TRUE
+           END)
+      AND ($5::TEXT = '' OR subscribers.email ILIKE $5 OR subscribers.name ILIKE $5)
+    ORDER BY last_at DESC, subscribers.id
+    OFFSET $6 LIMIT (CASE WHEN $7 < 1 THEN NULL ELSE $7 END);
+
 -- name: export-campaign-views
 SELECT campaign_views.campaign_id,
        COALESCE(campaigns.uuid::TEXT, '') AS campaign_uuid,
