@@ -170,6 +170,7 @@ func initFlags(ko *koanf.Koanf) {
 	f.Bool("install", false, "setup database (first time)")
 	f.Bool("idempotent", false, "make --install run only if the database isn't already setup")
 	f.Bool("upgrade", false, "upgrade database to the current version")
+	f.Bool("flag-bot-activity", false, "reclassify historical opens and clicks from mail security scanners and exit")
 	f.Bool("version", false, "show current version of the build")
 	f.Bool("new-config", false, "generate sample config file (at path given in --config)")
 	f.String("static-dir", "", "(optional) path to directory with static files")

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx"
+	"github.com/knadh/listmonk/internal/bot"
 	"github.com/knadh/listmonk/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
@@ -446,9 +447,10 @@ func (c *Core) GetCampaignSubscriberActivity(campIDs []int, fromDate, toDate, ev
 	return out, total, nil
 }
 
-// RegisterCampaignView registers a subscriber's view on a campaign.
-func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
-	if _, err := c.q.RegisterCampaignView.Exec(campUUID, subUUID); err != nil {
+// RegisterCampaignView registers a subscriber's view on a campaign. Views
+// flagged as isBot are recorded but excluded from engagement analytics.
+func (c *Core) RegisterCampaignView(campUUID, subUUID string, isBot bool) error {
+	if _, err := c.q.RegisterCampaignView.Exec(campUUID, subUUID, isBot); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Column == "campaign_id" {
 			return nil
 		}
@@ -471,9 +473,11 @@ func (c *Core) GetLinkURL(linkUUID string) (string, error) {
 }
 
 // RegisterCampaignLinkClick registers a subscriber's link click on a campaign.
-func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (string, error) {
+// Clicks flagged as isBot, or that exceed the burst threshold for the
+// subscriber on this campaign, are recorded but excluded from analytics.
+func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string, isBot bool) (string, error) {
 	var url string
-	if err := c.q.RegisterLinkClick.Get(&url, linkUUID, campUUID, subUUID); err != nil {
+	if err := c.q.RegisterLinkClick.Get(&url, linkUUID, campUUID, subUUID, isBot, bot.BurstClickLimit, bot.BurstWindowSecs); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Column == "link_id" {
 			return "", echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("public.invalidLink"))
 		}

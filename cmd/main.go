@@ -178,6 +178,12 @@ func init() {
 		checkUpgrade(db)
 	}
 
+	// Reclassification runs after migrations so that the is_bot columns exist.
+	if ko.Bool("flag-bot-activity") {
+		flagBotActivity(db)
+		os.Exit(0)
+	}
+
 	// Read the SQL queries from the queries file.
 	qMap := readQueries(queryFilePath, fs)
 

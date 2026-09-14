@@ -159,6 +159,10 @@ CREATE TABLE campaign_views (
 
     -- Subscribers may be deleted, but the view counts should remain.
     subscriber_id    INTEGER NULL REFERENCES subscribers(id) ON DELETE SET NULL ON UPDATE CASCADE,
+
+    -- Hits from mail security scanners and image proxies are recorded but
+    -- excluded from engagement analytics.
+    is_bot           BOOLEAN NOT NULL DEFAULT FALSE,
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 DROP INDEX IF EXISTS idx_views_camp_id; CREATE INDEX idx_views_camp_id ON campaign_views(campaign_id);
@@ -211,12 +215,17 @@ CREATE TABLE link_clicks (
 
     -- Subscribers may be deleted, but the link counts should remain.
     subscriber_id    INTEGER NULL REFERENCES subscribers(id) ON DELETE SET NULL ON UPDATE CASCADE,
+
+    -- Hits from mail security scanners that pre-fetch every link in a campaign
+    -- are recorded but excluded from engagement analytics.
+    is_bot           BOOLEAN NOT NULL DEFAULT FALSE,
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 DROP INDEX IF EXISTS idx_clicks_camp_id; CREATE INDEX idx_clicks_camp_id ON link_clicks(campaign_id);
 DROP INDEX IF EXISTS idx_clicks_link_id; CREATE INDEX idx_clicks_link_id ON link_clicks(link_id);
 DROP INDEX IF EXISTS idx_clicks_sub_id; CREATE INDEX idx_clicks_sub_id ON link_clicks(subscriber_id);
 DROP INDEX IF EXISTS idx_clicks_date; CREATE INDEX idx_clicks_date ON link_clicks(created_at);
+DROP INDEX IF EXISTS idx_clicks_sub_camp_date; CREATE INDEX idx_clicks_sub_camp_date ON link_clicks(subscriber_id, campaign_id, created_at);
 
 -- settings
 DROP TABLE IF EXISTS settings CASCADE;

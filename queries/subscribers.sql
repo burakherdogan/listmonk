@@ -445,7 +445,7 @@ WITH views AS (
         MAX(cv.created_at) as last_viewed_at
     FROM campaign_views cv
     LEFT JOIN campaigns c ON c.id = cv.campaign_id
-    WHERE cv.subscriber_id = $1
+    WHERE cv.subscriber_id = $1 AND NOT cv.is_bot
     GROUP BY c.id, c.uuid, c.name, c.subject
     ORDER BY last_viewed_at DESC
 ),
@@ -462,7 +462,7 @@ clicks AS (
     FROM link_clicks lc
     LEFT JOIN links l ON l.id = lc.link_id
     LEFT JOIN campaigns c ON c.id = lc.campaign_id
-    WHERE lc.subscriber_id = $1
+    WHERE lc.subscriber_id = $1 AND NOT lc.is_bot
     GROUP BY l.id, l.url, c.id, c.uuid, c.name, c.subject
     ORDER BY last_clicked_at DESC
 )

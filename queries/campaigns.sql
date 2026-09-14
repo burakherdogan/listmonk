@@ -122,12 +122,12 @@ media AS (
 ),
 views AS (
     SELECT campaign_id, COUNT(campaign_id) as num FROM campaign_views
-    WHERE campaign_id = ANY($1)
+    WHERE campaign_id = ANY($1) AND NOT is_bot
     GROUP BY campaign_id
 ),
 clicks AS (
     SELECT campaign_id, COUNT(campaign_id) as num FROM link_clicks
-    WHERE campaign_id = ANY($1)
+    WHERE campaign_id = ANY($1) AND NOT is_bot
     GROUP BY campaign_id
 ),
 bounces AS (
@@ -239,7 +239,7 @@ WITH intval AS (
 uniqIDs AS (
     SELECT DISTINCT ON(subscriber_id, campaign_id) subscriber_id, campaign_id, DATE_TRUNC((SELECT * FROM intval), created_at) AS "timestamp"
     FROM %s
-    WHERE campaign_id=ANY($1) AND created_at >= $2 AND created_at <= $3
+    WHERE campaign_id=ANY($1) AND created_at >= $2 AND created_at <= $3 AND NOT is_bot
     ORDER BY subscriber_id, campaign_id, "timestamp"
 )
 SELECT COUNT(*) AS "count", campaign_id, "timestamp"
@@ -253,7 +253,7 @@ WITH intval AS (
 )
 SELECT campaign_id, COUNT(*) AS "count", DATE_TRUNC((SELECT * FROM intval), created_at) AS "timestamp"
     FROM %s
-    WHERE campaign_id=ANY($1) AND created_at >= $2 AND created_at <= $3
+    WHERE campaign_id=ANY($1) AND created_at >= $2 AND created_at <= $3 AND NOT is_bot
     GROUP BY campaign_id, "timestamp" ORDER BY "timestamp" ASC;
 
 -- name: get-campaign-bounce-counts
@@ -273,6 +273,7 @@ SELECT COUNT(%s) AS "count", url
     FROM link_clicks
     LEFT JOIN links ON (link_clicks.link_id = links.id)
     WHERE campaign_id=ANY($1) AND link_clicks.created_at >= $2 AND link_clicks.created_at <= $3
+        AND NOT link_clicks.is_bot
     GROUP BY links.url ORDER BY "count" DESC LIMIT 50;
 
 -- name: get-campaign-subscriber-activity
@@ -282,6 +283,7 @@ WITH views AS (
            MIN(created_at) AS first_at, MAX(created_at) AS last_at
     FROM campaign_views
     WHERE campaign_id = ANY($1) AND created_at >= $2 AND created_at <= $3 AND subscriber_id IS NOT NULL
+        AND NOT is_bot
     GROUP BY subscriber_id
 ),
 clicks AS (
@@ -289,6 +291,7 @@ clicks AS (
            MIN(created_at) AS first_at, MAX(created_at) AS last_at
     FROM link_clicks
     WHERE campaign_id = ANY($1) AND created_at >= $2 AND created_at <= $3 AND subscriber_id IS NOT NULL
+        AND NOT is_bot
     GROUP BY subscriber_id
 ),
 bounced AS (
@@ -536,6 +539,6 @@ WITH view AS (
     LEFT JOIN subscribers ON (CASE WHEN $2::TEXT != '' THEN subscribers.uuid = $2::UUID ELSE FALSE END)
     WHERE campaigns.uuid = $1
 )
-INSERT INTO campaign_views (campaign_id, subscriber_id)
-    VALUES((SELECT campaign_id FROM view), (SELECT subscriber_id FROM view));
+INSERT INTO campaign_views (campaign_id, subscriber_id, is_bot)
+    VALUES((SELECT campaign_id FROM view), (SELECT subscriber_id FROM view), $3::BOOLEAN);
 
